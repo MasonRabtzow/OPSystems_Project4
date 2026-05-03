@@ -41,3 +41,21 @@ void add_client(int fd, const char* ip, const char* name, const char* color) {
     head = new_usr;
     pthread_mutex_unlock(&list_mutex);
 }
+
+// Safely remove a client
+void remove_client(int fd) {
+    pthread_mutex_lock(&list_mutex);
+    USR* curr = head;
+    USR* prev = NULL;
+    while (curr != NULL) {
+        if (curr->clisockfd == fd) {
+            if (prev == NULL) head = curr->next;
+            else prev->next = curr->next;
+            free(curr);
+            break;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+    pthread_mutex_unlock(&list_mutex);
+}
