@@ -93,3 +93,71 @@ void broadcast(int fromfd, const char* message) {
     }
     pthread_mutex_unlock(&list_mutex);
 }
+
+typedef struct _ThreadArgs {
+    int clisockfd;
+    char ip[INET_ADDRSTRLEN];
+} ThreadArgs;
+
+void* thread_main(void* args) {
+    pthread_detach(pthread_self());
+
+    int clisockfd = ((ThreadArgs*) args)->clisockfd;
+    char ip[INET_ADDRSTRLEN];
+    strcpy(ip, ((ThreadArgs*) args)->ip);
+    free(args);
+
+    char name[50];
+    int nrcv;
+
+    // First message from client should be their name
+    nrcv = recv(clisockfd, name, 49, 0);
+    if (nrcv <= 0) {
+        close(clisockfd);
+        return NULL;
+    }
+    name[nrcv] = '\0';
+    name[strcspn(name, "\n")] = 0; // Strip newline
+
+    // Assign a random ANSI color code (31 to 36 are text colors)
+    char color[20];
+    snprintf(color, sizeof(color), "\033[1;3%dm", (rand() % 6) + 1);
+
+    // Add to list and update server console
+    add_client(clisockfd, ip, name, color);
+    print_clients();
+
+    // Broadcast Join Message
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "%s%s (%s) has joined the room\033[0m", color, name, ip);
+    broadcast(clisockfd, buffer);
+
+    // Main communication loop
+    while (1) {
+        memset(buffer, 0, 512);
+        nrcv = recv(clisockfd, buffer, 255, 0);
+        
+        if (nrcv <= 0) break; // Client disconnected or error
+
+        buffer[nrcv] = '\0';
+        buffer[strcspn(buffer, "\n")] = 0; // Strip newline
+        
+        if (strlen(buffer) == 0) continue;
+
+        // Format and broadcast: [Name (IP)]: Message
+        char formatted_msg[1024]; 
+        snprintf(formatted_msg, sizeof(formatted_msg), "%s[%s (%s)]: %s\033[0m", color, name, ip, buffer);
+        broadcast(clisockfd, formatted_msg);
+    }
+
+    // Handle Disconnect
+    remove_client(clisockfd);
+    print_clients();
+    
+    // Broadcast Leave Message (Using grey/default color for system messages)
+    snprintf(buffer, sizeof(buffer), "\033[1;30m%s (%s) has left the room\033[0m", name, ip);
+    broadcast(clisockfd, buffer);
+
+    close(clisockfd);
+    return NULL;
+}
