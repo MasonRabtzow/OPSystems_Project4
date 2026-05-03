@@ -75,3 +75,21 @@ void print_clients() {
     printf("---------------------------------\n\n");
     pthread_mutex_unlock(&list_mutex);
 }
+
+// Broadcast a message to everyone except the sender
+void broadcast(int fromfd, const char* message) {
+    pthread_mutex_lock(&list_mutex);
+    USR* cur = head;
+    int nmsg = strlen(message);
+    
+    while (cur != NULL) {
+        if (cur->clisockfd != fromfd) {
+            int nsen = send(cur->clisockfd, message, nmsg, 0);
+            if (nsen != nmsg) {
+                perror("ERROR send() failed during broadcast");
+            }
+        }
+        cur = cur->next;
+    }
+    pthread_mutex_unlock(&list_mutex);
+}
