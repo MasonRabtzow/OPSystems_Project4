@@ -59,3 +59,19 @@ void remove_client(int fd) {
     }
     pthread_mutex_unlock(&list_mutex);
 }
+
+// Print the up-to-date client list to the server console
+void print_clients() {
+    pthread_mutex_lock(&list_mutex);
+    printf("\n--- Current Connected Clients ---\n");
+    USR* curr = head;
+    if (curr == NULL) {
+        printf("No clients connected.\n");
+    }
+    while (curr != NULL) {
+        printf("- %s (%s)\n", curr->name, curr->ip);
+        curr = curr->next;
+    }
+    printf("---------------------------------\n\n");
+    pthread_mutex_unlock(&list_mutex);
+}
