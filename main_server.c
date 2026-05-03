@@ -161,3 +161,46 @@ void* thread_main(void* args) {
     close(clisockfd);
     return NULL;
 }
+
+
+int main(int argc, char *argv[]) {
+    srand(time(NULL)); // Seed random number generator for colors
+
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) error("ERROR opening socket");
+
+    // Allow quick port reuse
+    int opt = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in serv_addr;
+    socklen_t slen = sizeof(serv_addr);
+    memset((char*) &serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;	
+    serv_addr.sin_port = htons(PORT_NUM);
+
+    if (bind(sockfd, (struct sockaddr*) &serv_addr, slen) < 0) 
+        error("ERROR on binding");
+
+    listen(sockfd, 10);
+    printf("Server started on port %d. Waiting for connections...\n", PORT_NUM);
+
+    while(1) {
+        struct sockaddr_in cli_addr;
+        socklen_t clen = sizeof(cli_addr);
+        int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clen);
+        if (newsockfd < 0) error("ERROR on accept");
+
+        ThreadArgs* args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
+        args->clisockfd = newsockfd;
+        strcpy(args->ip, inet_ntoa(cli_addr.sin_addr));
+
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, thread_main, (void*) args) != 0) 
+            error("ERROR creating a new thread");
+    }
+
+    close(sockfd);
+    return 0; 
+}
