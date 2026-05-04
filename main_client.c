@@ -169,4 +169,20 @@ int main(int argc, char *argv[]) {
     
     printf("You are in the room. Type /quit to exit.\n\n");
 
+    // 4. Create Threads
+    pthread_t tid1, tid2;
+    ThreadArgs* args;
     
+    args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
+    args->clisockfd = sockfd;
+    pthread_create(&tid1, NULL, thread_main_send, (void*) args);
+
+    args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
+    args->clisockfd = sockfd;
+    pthread_create(&tid2, NULL, thread_main_recv, (void*) args);
+
+    pthread_join(tid1, NULL);
+
+    close(sockfd);
+    return 0;
+}
