@@ -120,3 +120,21 @@ void print_clients() {
     printf("-----------------------------------------\n\n");
     pthread_mutex_unlock(&global_room_mutex);
 }
+
+// Broadcast a message to everyone in a specific room
+void broadcast_to_room(ROOM* room, int fromfd, const char* message) {
+    pthread_mutex_lock(&room->room_mutex);
+    USR* cur = room->clients_head;
+    int nmsg = strlen(message);
+    
+    while (cur != NULL) {
+        if (cur->clisockfd != fromfd) {
+            int nsen = send(cur->clisockfd, message, nmsg, 0);
+            if (nsen != nmsg) {
+                perror("ERROR send() failed during broadcast");
+            }
+        }
+        cur = cur->next;
+    }
+    pthread_mutex_unlock(&room->room_mutex);
+}
