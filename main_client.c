@@ -80,3 +80,13 @@ int main(int argc, char *argv[]) {
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
     serv_addr.sin_port = htons(PORT_NUM);
+
+    if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
+        struct hostent* server = gethostbyname(argv[1]);
+        if (server == NULL) error("ERROR, no such host");
+        memcpy((char*)server->h_addr, (char*)&serv_addr.sin_addr.s_addr, server->h_length);
+    }
+
+    printf("Connecting to server...\n");
+    if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+        error("ERROR connecting");
