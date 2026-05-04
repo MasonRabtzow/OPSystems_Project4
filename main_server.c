@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <time.h>
+#include <signal.h> // Added for SIGPIPE handling
 
 #define PORT_NUM 9001
 
@@ -15,7 +16,6 @@ void error(const char *msg) {
     perror(msg);
     exit(1);
 }
-
 
 // User structure
 typedef struct _USR {
@@ -68,6 +68,33 @@ void remove_client_from_room(ROOM* room, int fd) {
         curr = curr->next;
     }
     pthread_mutex_unlock(&room->room_mutex);
+}
+
+// Safely delete a room if there are no clients left in it
+void check_and_remove_empty_room(ROOM* target_room) {
+    pthread_mutex_lock(&global_room_mutex);
+    pthread_mutex_lock(&target_room->room_mutex);
+    int is_empty = (target_room->clients_head == NULL);
+    pthread_mutex_unlock(&target_room->room_mutex);
+
+    if (is_empty) {
+        ROOM* curr = room_head;
+        ROOM* prev = NULL;
+        while (curr != NULL) {
+            if (curr == target_room) {
+                if (prev == NULL) room_head = curr->next;
+                else prev->next = curr->next;
+
+                pthread_mutex_destroy(&curr->room_mutex);
+                free(curr);
+                printf("=> Room %d became empty and was deleted.\n", target_room->room_id);
+                break;
+            }
+            prev = curr;
+            curr = curr->next;
+        }
+    }
+    pthread_mutex_unlock(&global_room_mutex);
 }
 
 // Print the up-to-date client list organized by rooms
@@ -128,103 +155,152 @@ void* thread_main(void* args) {
     char buffer[1024];
     int nrcv;
 
-    // 1. Initial Handshake: Wait for room request (new or ID)
+    // 1. Initial Handshake: Wait for room request
     nrcv = recv(clisockfd, buffer, 255, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
     buffer[nrcv] = '\0';
     buffer[strcspn(buffer, "\n")] = 0;
 
     ROOM* my_room = NULL;
-    char response[64];
+    char response[1024];
 
-    if (strcmp(buffer, "new") == 0) {
-        // Create a new room
+    // Check if the client sent an invalid room number or explicitly asked for a list
+    if (strcmp(buffer, "new") != 0 && atoi(buffer) <= 0) {
         pthread_mutex_lock(&global_room_mutex);
-        my_room = (ROOM*) malloc(sizeof(ROOM));
-        my_room->room_id = next_room_id++;
-        my_room->clients_head = NULL;
-        pthread_mutex_init(&my_room->room_mutex, NULL);
         
-        my_room->next = room_head;
-        room_head = my_room;
-        pthread_mutex_unlock(&global_room_mutex);
+        if (room_head == NULL) {
+            // AUTONEW: No rooms exist, force create one
+            my_room = (ROOM*) malloc(sizeof(ROOM));
+            my_room->room_id = next_room_id++;
+            my_room->clients_head = NULL;
+            pthread_mutex_init(&my_room->room_mutex, NULL);
+            
+            my_room->next = room_head;
+            room_head = my_room;
+            pthread_mutex_unlock(&global_room_mutex);
 
-        snprintf(response, sizeof(response), "OK %d", my_room->room_id);
-        send(clisockfd, response, strlen(response), 0);
-    } else {
-        // Search for existing room
-        int requested_id = atoi(buffer);
-        pthread_mutex_lock(&global_room_mutex);
-        ROOM* curr = room_head;
-        while (curr != NULL) {
-            if (curr->room_id == requested_id) {
-                my_room = curr;
-                break;
-            }
-            curr = curr->next;
-        }
-        pthread_mutex_unlock(&global_room_mutex);
-
-        if (my_room != NULL) {
-            snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+            snprintf(response, sizeof(response), "AUTONEW %d", my_room->room_id);
             send(clisockfd, response, strlen(response), 0);
         } else {
-            // Room not found, reject client
-            snprintf(response, sizeof(response), "ERR");
+            // LIST: Rooms exist, compile the interactive menu
+            strcpy(response, "LIST\n--- Available Rooms ---\n");
+            ROOM* curr = room_head;
+            while (curr != NULL) {
+                pthread_mutex_lock(&curr->room_mutex);
+                int count = 0;
+                USR* c = curr->clients_head;
+                while (c) { count++; c = c->next; }
+                pthread_mutex_unlock(&curr->room_mutex);
+
+                char line[64];
+                snprintf(line, sizeof(line), "  Room %d: %d person(s)\n", curr->room_id, count);
+                strcat(response, line);
+                curr = curr->next;
+            }
+            pthread_mutex_unlock(&global_room_mutex);
+
+            // Send list menu to client
             send(clisockfd, response, strlen(response), 0);
-            close(clisockfd);
-            return NULL;
+
+            // Wait for client to make a choice
+            nrcv = recv(clisockfd, buffer, 255, 0);
+            if (nrcv <= 0) { close(clisockfd); return NULL; }
+            buffer[nrcv] = '\0';
+            buffer[strcspn(buffer, "\n")] = 0;
         }
     }
+    // 2. Process room assignment (unless AUTONEW already handled it)
+        if (my_room == NULL) {
+            if (strcmp(buffer, "new") == 0) {
+                // Create a new room
+                pthread_mutex_lock(&global_room_mutex);
+                my_room = (ROOM*) malloc(sizeof(ROOM));
+                my_room->room_id = next_room_id++;
+                my_room->clients_head = NULL;
+                pthread_mutex_init(&my_room->room_mutex, NULL);
+                
+                my_room->next = room_head;
+                room_head = my_room;
+                pthread_mutex_unlock(&global_room_mutex);
 
-     // 2. Receive the client's name
-    char name[50];
-    nrcv = recv(clisockfd, name, 49, 0);
-    if (nrcv <= 0) { close(clisockfd); return NULL; }
-    name[nrcv] = '\0';
-    name[strcspn(name, "\n")] = 0; 
+                snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+                send(clisockfd, response, strlen(response), 0);
+            } else {
+                // Search for existing room
+                int requested_id = atoi(buffer);
+                pthread_mutex_lock(&global_room_mutex);
+                ROOM* curr = room_head;
+                while (curr != NULL) {
+                    if (curr->room_id == requested_id) {
+                        my_room = curr;
+                        break;
+                    }
+                    curr = curr->next;
+                }
+                pthread_mutex_unlock(&global_room_mutex);
 
-    // Assign a random ANSI color code (31 to 36 are text colors)
-    char color[20];
-    snprintf(color, sizeof(color), "\033[1;3%dm", (rand() % 6) + 1);
+                if (my_room != NULL) {
+                    snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+                    send(clisockfd, response, strlen(response), 0);
+                } else {
+                    // Room not found, reject client
+                    snprintf(response, sizeof(response), "ERR");
+                    send(clisockfd, response, strlen(response), 0);
+                    close(clisockfd);
+                    return NULL;
+                }
+            }
+        }
+        // 3. Receive the client's name
+        char name[50];
+        nrcv = recv(clisockfd, name, 49, 0);
+        if (nrcv <= 0) { close(clisockfd); return NULL; }
+        name[nrcv] = '\0';
+        name[strcspn(name, "\n")] = 0; 
 
-    // Add to specific room and update server console
-    add_client_to_room(my_room, clisockfd, ip, name, color);
-    print_clients();
+        char color[20];
+        snprintf(color, sizeof(color), "\033[1;3%dm", (rand() % 6) + 1);
 
-    // Broadcast Join Message to that room
-    snprintf(buffer, sizeof(buffer), "%s%s (%s) has joined Room %d\033[0m", color, name, ip, my_room->room_id);
-    broadcast_to_room(my_room, clisockfd, buffer);
+        add_client_to_room(my_room, clisockfd, ip, name, color);
+        print_clients();
 
-    // 3. Main communication loop
-    while (1) {
-        memset(buffer, 0, 1024);
-        nrcv = recv(clisockfd, buffer, 511, 0); // Limit to leave space for formatting
+        snprintf(buffer, sizeof(buffer), "%s%s (%s) joined the chat room! %d\033[0m", color, name, ip, my_room->room_id);
+        broadcast_to_room(my_room, clisockfd, buffer);
+
+        // 4. Main communication loop
+        while (1) {
+            memset(buffer, 0, 1024);
+            nrcv = recv(clisockfd, buffer, 511, 0); 
+            
+            if (nrcv <= 0) break; 
+
+            buffer[nrcv] = '\0';
+            buffer[strcspn(buffer, "\n")] = 0; 
+            
+            if (strlen(buffer) == 0) continue;
+
+            char formatted_msg[1024]; 
+            snprintf(formatted_msg, sizeof(formatted_msg), "%s[%s (%s)]: %s\033[0m", color, name, ip, buffer);
+            broadcast_to_room(my_room, clisockfd, formatted_msg);
+        }
+
+        // 5. Handle Disconnect
+        remove_client_from_room(my_room, clisockfd);
         
-        if (nrcv <= 0) break; 
+        snprintf(buffer, sizeof(buffer), "\033[1;30m%s (%s) has left Room %d\033[0m", name, ip, my_room->room_id);
+        broadcast_to_room(my_room, clisockfd, buffer);
 
-        buffer[nrcv] = '\0';
-        buffer[strcspn(buffer, "\n")] = 0; 
-        
-        if (strlen(buffer) == 0) continue;
+        check_and_remove_empty_room(my_room);
+        print_clients();
 
-        char formatted_msg[1024]; 
-        snprintf(formatted_msg, sizeof(formatted_msg), "%s[%s (%s)]: %s\033[0m", color, name, ip, buffer);
-        broadcast_to_room(my_room, clisockfd, formatted_msg);
-    }
-
-    // Handle Disconnect
-    remove_client_from_room(my_room, clisockfd);
-    print_clients();
-    
-    snprintf(buffer, sizeof(buffer), "\033[1;30m%s (%s) has left Room %d\033[0m", name, ip, my_room->room_id);
-    broadcast_to_room(my_room, clisockfd, buffer);
-
-    close(clisockfd);
-    return NULL;
+        close(clisockfd);
+        return NULL;
 }
 
 int main(int argc, char *argv[]) {
+    // Ignore broken pipe signals to prevent server crashes
+    signal(SIGPIPE, SIG_IGN); 
+
     srand(time(NULL)); 
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
