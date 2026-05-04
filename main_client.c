@@ -146,3 +146,11 @@ typedef struct _ThreadArgs {
 
 void* thread_main(void* args) {
     pthread_detach(pthread_self());
+
+    int clisockfd = ((ThreadArgs*) args)->clisockfd;
+    char ip[INET_ADDRSTRLEN];
+    strcpy(ip, ((ThreadArgs*) args)->ip);
+    free(args);
+
+    char buffer[1024];
+    int nrcv;
