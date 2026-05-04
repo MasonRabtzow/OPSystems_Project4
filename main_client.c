@@ -19,3 +19,24 @@ void error(const char *msg) {
 typedef struct _ThreadArgs {
     int clisockfd;
 } ThreadArgs;
+
+void* thread_main_recv(void* args) {
+    pthread_detach(pthread_self());
+    int sockfd = ((ThreadArgs*) args)->clisockfd;
+    free(args);
+
+    char buffer[1024]; 
+    int n;
+
+    while (1) {
+        memset(buffer, 0, 1024);
+        n = recv(sockfd, buffer, 1024, 0);
+        if (n <= 0) {
+            printf("\nDisconnected from server.\n");
+            exit(0);
+        }
+        printf("\r%s\n", buffer); 
+    }
+
+    return NULL;
+}
