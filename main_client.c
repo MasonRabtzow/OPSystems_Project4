@@ -160,4 +160,13 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    // 3. Collect and Send Name
+    char name[50];
+    printf("Enter your name to join the chat: ");
+    fgets(name, 49, stdin);
+    name[strcspn(name, "\n")] = 0; 
+    send(sockfd, name, strlen(name), 0);
+    
+    printf("You are in the room. Type /quit to exit.\n\n");
+
     
