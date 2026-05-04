@@ -37,3 +37,17 @@ typedef struct _ROOM {
 ROOM *room_head = NULL;
 pthread_mutex_t global_room_mutex = PTHREAD_MUTEX_INITIALIZER;
 int next_room_id = 1;
+
+// Safely add a client to a specific room
+void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name, const char* color) {
+    USR* new_usr = (USR*) malloc(sizeof(USR));
+    new_usr->clisockfd = fd;
+    strcpy(new_usr->ip, ip);
+    strcpy(new_usr->name, name);
+    strcpy(new_usr->color, color);
+    
+    pthread_mutex_lock(&room->room_mutex);
+    new_usr->next = room->clients_head;
+    room->clients_head = new_usr;
+    pthread_mutex_unlock(&room->room_mutex);
+}
