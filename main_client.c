@@ -106,4 +106,58 @@ int main(int argc, char *argv[]) {
     if (n <= 0) error("ERROR reading response from server");
     response[n] = '\0'; // Guarantee null termination
 
+    // 2. Process Multi-Stage Server Response
+    if (strncmp(response, "AUTONEW ", 8) == 0) {
+        // Condition A: Zero rooms existed, server forced a new one
+        int room_id = atoi(response + 8);
+        printf("Connected to %s with new room number %d\n", inet_ntoa(serv_addr.sin_addr), room_id);
+    } 
+    else if (strncmp(response, "LIST\n", 5) == 0) {
+        // Condition B: Rooms exist, display menu and prompt user
+        printf("\n%s\n", response + 5);
+        
+        char choice[64] = "";
+        while (strlen(choice) == 0) {
+            printf("Choose the room number or type [new] to create a new room: ");
+            fgets(choice, 63, stdin);
+            choice[strcspn(choice, "\n")] = 0;
+        }
+
+        // Send choice back to server
+        send(sockfd, choice, strlen(choice), 0);
+
+        // Await the final OK or ERR
+        memset(response, 0, 1024);
+        n = recv(sockfd, response, 1023, 0);
+        if (n <= 0) error("ERROR reading final response from server");
+        response[n] = '\0';
+
+        if (strncmp(response, "ERR", 3) == 0) {
+            printf("Connection Rejected: Room does not exist.\n");
+            close(sockfd);
+            exit(1);
+        } else if (strncmp(response, "OK ", 3) == 0) {
+            int room_id = atoi(response + 3);
+            printf("Connected to %s with room number %d\n", inet_ntoa(serv_addr.sin_addr), room_id);
+        } else {
+            printf("Unknown server response. Disconnecting.\n");
+            close(sockfd);
+            exit(1);
+        }
+    }
+    else if (strncmp(response, "ERR", 3) == 0) {
+        // Condition C: Client passed a bad argument initially
+        printf("Connection Rejected: Room '%s' does not exist.\n", initial_request);
+        close(sockfd);
+        exit(1);
+    } else if (strncmp(response, "OK ", 3) == 0) {
+        // Condition D: Client passed a valid room number or "new" initially
+        int room_id = atoi(response + 3);
+        printf("Connected to %s with room number %d\n", inet_ntoa(serv_addr.sin_addr), room_id);
+    } else {
+        printf("Unknown server response. Disconnecting.\n");
+        close(sockfd);
+        exit(1);
+    }
+
     
