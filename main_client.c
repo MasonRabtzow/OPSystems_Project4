@@ -251,4 +251,19 @@ void* thread_main(void* args) {
                 }
             }
         }
-        
+        // 3. Receive the client's name
+        char name[50];
+        nrcv = recv(clisockfd, name, 49, 0);
+        if (nrcv <= 0) { close(clisockfd); return NULL; }
+        name[nrcv] = '\0';
+        name[strcspn(name, "\n")] = 0; 
+
+        char color[20];
+        snprintf(color, sizeof(color), "\033[1;3%dm", (rand() % 6) + 1);
+
+        add_client_to_room(my_room, clisockfd, ip, name, color);
+        print_clients();
+
+        snprintf(buffer, sizeof(buffer), "%s%s (%s) joined the chat room! %d\033[0m", color, name, ip, my_room->room_id);
+        broadcast_to_room(my_room, clisockfd, buffer);
+
