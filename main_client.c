@@ -209,3 +209,46 @@ void* thread_main(void* args) {
             buffer[strcspn(buffer, "\n")] = 0;
         }
     }
+    // 2. Process room assignment (unless AUTONEW already handled it)
+        if (my_room == NULL) {
+            if (strcmp(buffer, "new") == 0) {
+                // Create a new room
+                pthread_mutex_lock(&global_room_mutex);
+                my_room = (ROOM*) malloc(sizeof(ROOM));
+                my_room->room_id = next_room_id++;
+                my_room->clients_head = NULL;
+                pthread_mutex_init(&my_room->room_mutex, NULL);
+                
+                my_room->next = room_head;
+                room_head = my_room;
+                pthread_mutex_unlock(&global_room_mutex);
+
+                snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+                send(clisockfd, response, strlen(response), 0);
+            } else {
+                // Search for existing room
+                int requested_id = atoi(buffer);
+                pthread_mutex_lock(&global_room_mutex);
+                ROOM* curr = room_head;
+                while (curr != NULL) {
+                    if (curr->room_id == requested_id) {
+                        my_room = curr;
+                        break;
+                    }
+                    curr = curr->next;
+                }
+                pthread_mutex_unlock(&global_room_mutex);
+
+                if (my_room != NULL) {
+                    snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+                    send(clisockfd, response, strlen(response), 0);
+                } else {
+                    // Room not found, reject client
+                    snprintf(response, sizeof(response), "ERR");
+                    send(clisockfd, response, strlen(response), 0);
+                    close(clisockfd);
+                    return NULL;
+                }
+            }
+        }
+        
