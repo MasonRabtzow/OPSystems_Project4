@@ -267,3 +267,20 @@ void* thread_main(void* args) {
         snprintf(buffer, sizeof(buffer), "%s%s (%s) joined the chat room! %d\033[0m", color, name, ip, my_room->room_id);
         broadcast_to_room(my_room, clisockfd, buffer);
 
+        // 4. Main communication loop
+        while (1) {
+            memset(buffer, 0, 1024);
+            nrcv = recv(clisockfd, buffer, 511, 0); 
+            
+            if (nrcv <= 0) break; 
+
+            buffer[nrcv] = '\0';
+            buffer[strcspn(buffer, "\n")] = 0; 
+            
+            if (strlen(buffer) == 0) continue;
+
+            char formatted_msg[1024]; 
+            snprintf(formatted_msg, sizeof(formatted_msg), "%s[%s (%s)]: %s\033[0m", color, name, ip, buffer);
+            broadcast_to_room(my_room, clisockfd, formatted_msg);
+        }
+
