@@ -154,3 +154,58 @@ void* thread_main(void* args) {
 
     char buffer[1024];
     int nrcv;
+
+    // 1. Initial Handshake: Wait for room request
+    nrcv = recv(clisockfd, buffer, 255, 0);
+    if (nrcv <= 0) { close(clisockfd); return NULL; }
+    buffer[nrcv] = '\0';
+    buffer[strcspn(buffer, "\n")] = 0;
+
+    ROOM* my_room = NULL;
+    char response[1024];
+
+    // Check if the client sent an invalid room number or explicitly asked for a list
+    if (strcmp(buffer, "new") != 0 && atoi(buffer) <= 0) {
+        pthread_mutex_lock(&global_room_mutex);
+        
+        if (room_head == NULL) {
+            // AUTONEW: No rooms exist, force create one
+            my_room = (ROOM*) malloc(sizeof(ROOM));
+            my_room->room_id = next_room_id++;
+            my_room->clients_head = NULL;
+            pthread_mutex_init(&my_room->room_mutex, NULL);
+            
+            my_room->next = room_head;
+            room_head = my_room;
+            pthread_mutex_unlock(&global_room_mutex);
+
+            snprintf(response, sizeof(response), "AUTONEW %d", my_room->room_id);
+            send(clisockfd, response, strlen(response), 0);
+        } else {
+            // LIST: Rooms exist, compile the interactive menu
+            strcpy(response, "LIST\n--- Available Rooms ---\n");
+            ROOM* curr = room_head;
+            while (curr != NULL) {
+                pthread_mutex_lock(&curr->room_mutex);
+                int count = 0;
+                USR* c = curr->clients_head;
+                while (c) { count++; c = c->next; }
+                pthread_mutex_unlock(&curr->room_mutex);
+
+                char line[64];
+                snprintf(line, sizeof(line), "  Room %d: %d person(s)\n", curr->room_id, count);
+                strcat(response, line);
+                curr = curr->next;
+            }
+            pthread_mutex_unlock(&global_room_mutex);
+
+            // Send list menu to client
+            send(clisockfd, response, strlen(response), 0);
+
+            // Wait for client to make a choice
+            nrcv = recv(clisockfd, buffer, 255, 0);
+            if (nrcv <= 0) { close(clisockfd); return NULL; }
+            buffer[nrcv] = '\0';
+            buffer[strcspn(buffer, "\n")] = 0;
+        }
+    }
