@@ -96,3 +96,27 @@ void check_and_remove_empty_room(ROOM* target_room) {
     }
     pthread_mutex_unlock(&global_room_mutex);
 }
+
+// Print the up-to-date client list organized by rooms
+void print_clients() {
+    pthread_mutex_lock(&global_room_mutex);
+    printf("\n--- Current Connected Clients By Room ---\n");
+    ROOM* r = room_head;
+    if (r == NULL) {
+        printf("No active rooms.\n");
+    }
+    while (r != NULL) {
+        pthread_mutex_lock(&r->room_mutex);
+        printf("[Room %d]\n", r->room_id);
+        USR* c = r->clients_head;
+        if (c == NULL) printf("  (Empty)\n");
+        while (c != NULL) {
+            printf("  - %s (%s)\n", c->name, c->ip);
+            c = c->next;
+        }
+        pthread_mutex_unlock(&r->room_mutex);
+        r = r->next;
+    }
+    printf("-----------------------------------------\n\n");
+    pthread_mutex_unlock(&global_room_mutex);
+}
