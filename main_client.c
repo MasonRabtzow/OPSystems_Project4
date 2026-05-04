@@ -25,3 +25,15 @@ typedef struct _USR {
     char color[20];
     struct _USR* next;
 } USR;
+
+// Room structure containing its own client list and mutex
+typedef struct _ROOM {
+    int room_id;
+    USR* clients_head;
+    pthread_mutex_t room_mutex;
+    struct _ROOM* next;
+} ROOM;
+
+ROOM *room_head = NULL;
+pthread_mutex_t global_room_mutex = PTHREAD_MUTEX_INITIALIZER;
+int next_room_id = 1;
