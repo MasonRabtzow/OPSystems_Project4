@@ -138,3 +138,11 @@ void broadcast_to_room(ROOM* room, int fromfd, const char* message) {
     }
     pthread_mutex_unlock(&room->room_mutex);
 }
+
+typedef struct _ThreadArgs {
+    int clisockfd;
+    char ip[INET_ADDRSTRLEN];
+} ThreadArgs;
+
+void* thread_main(void* args) {
+    pthread_detach(pthread_self());
