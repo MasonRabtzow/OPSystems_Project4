@@ -64,3 +64,19 @@ void* thread_main_send(void* args) {
 
     return NULL;
 }
+
+int main(int argc, char *argv[]) {
+    // Room argument is now optional
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <hostname> [new | room_number]\n", argv[0]);
+        exit(1);
+    }
+
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) error("ERROR opening socket");
+
+    struct sockaddr_in serv_addr;
+    memset((char*) &serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
+    serv_addr.sin_port = htons(PORT_NUM);
