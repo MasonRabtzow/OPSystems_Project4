@@ -90,3 +90,20 @@ int main(int argc, char *argv[]) {
     printf("Connecting to server...\n");
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
+
+    // 1. Handshake Phase: Send initial request
+    char initial_request[64];
+    if (argc >= 3) {
+        strcpy(initial_request, argv[2]); // Explicit argument passed
+    } else {
+        strcpy(initial_request, "LIST");  // Trigger the menu fallback
+    }
+    send(sockfd, initial_request, strlen(initial_request), 0);
+    
+    char response[1024];
+    memset(response, 0, 1024);
+    int n = recv(sockfd, response, 1023, 0);
+    if (n <= 0) error("ERROR reading response from server");
+    response[n] = '\0'; // Guarantee null termination
+
+    
