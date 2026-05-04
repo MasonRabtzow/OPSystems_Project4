@@ -177,7 +177,7 @@ void* thread_main(void* args) {
         }
     }
 
-    // 2. Receive the client's name
+     // 2. Receive the client's name
     char name[50];
     nrcv = recv(clisockfd, name, 49, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
