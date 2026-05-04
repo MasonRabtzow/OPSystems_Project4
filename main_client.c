@@ -51,3 +51,21 @@ void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name, co
     room->clients_head = new_usr;
     pthread_mutex_unlock(&room->room_mutex);
 }
+
+// Safely remove a client from a specific room
+void remove_client_from_room(ROOM* room, int fd) {
+    pthread_mutex_lock(&room->room_mutex);
+    USR* curr = room->clients_head;
+    USR* prev = NULL;
+    while (curr != NULL) {
+        if (curr->clisockfd == fd) {
+            if (prev == NULL) room->clients_head = curr->next;
+            else prev->next = curr->next;
+            free(curr);
+            break;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+    pthread_mutex_unlock(&room->room_mutex);
+}
