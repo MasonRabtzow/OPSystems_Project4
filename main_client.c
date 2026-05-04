@@ -16,3 +16,12 @@ void error(const char *msg) {
     perror(msg);
     exit(1);
 }
+
+// User structure
+typedef struct _USR {
+    int clisockfd;
+    char ip[INET_ADDRSTRLEN];
+    char name[50];
+    char color[20];
+    struct _USR* next;
+} USR;
