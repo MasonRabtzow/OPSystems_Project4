@@ -16,6 +16,7 @@ void error(const char *msg) {
     exit(1);
 }
 
+
 // User structure
 typedef struct _USR {
     int clisockfd;
