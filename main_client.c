@@ -40,3 +40,27 @@ void* thread_main_recv(void* args) {
 
     return NULL;
 }
+
+void* thread_main_send(void* args) {
+    pthread_detach(pthread_self());
+    int sockfd = ((ThreadArgs*) args)->clisockfd;
+    free(args);
+
+    char buffer[256];
+    int n;
+
+    while (1) {
+        memset(buffer, 0, 256);
+        
+        if (fgets(buffer, 255, stdin) == NULL) break;
+        buffer[strcspn(buffer, "\n")] = 0;
+
+        if (strlen(buffer) == 0) continue; 
+        if (strcmp(buffer, "/quit") == 0) break;
+
+        n = send(sockfd, buffer, strlen(buffer), 0);
+        if (n < 0) error("ERROR writing to socket");
+    }
+
+    return NULL;
+}
