@@ -284,3 +284,16 @@ void* thread_main(void* args) {
             broadcast_to_room(my_room, clisockfd, formatted_msg);
         }
 
+        // 5. Handle Disconnect
+        remove_client_from_room(my_room, clisockfd);
+        
+        snprintf(buffer, sizeof(buffer), "\033[1;30m%s (%s) has left Room %d\033[0m", name, ip, my_room->room_id);
+        broadcast_to_room(my_room, clisockfd, buffer);
+
+        check_and_remove_empty_room(my_room);
+        print_clients();
+
+        close(clisockfd);
+        return NULL;
+}
+
