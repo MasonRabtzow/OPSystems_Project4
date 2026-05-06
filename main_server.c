@@ -57,7 +57,18 @@ int get_next_available_room_id() {
 }
 
 
-// Safely remove a client from a specific room
+void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name) {
+    USR* new_usr = (USR*) malloc(sizeof(USR));
+    new_usr->clisockfd = fd;
+    strcpy(new_usr->ip, ip);
+    strcpy(new_usr->name, name);
+    
+    pthread_mutex_lock(&room->room_mutex);
+    new_usr->next = room->clients_head;
+    room->clients_head = new_usr;
+    pthread_mutex_unlock(&room->room_mutex);
+}
+
 void remove_client_from_room(ROOM* room, int fd) {
     pthread_mutex_lock(&room->room_mutex);
     USR* curr = room->clients_head;
@@ -75,32 +86,6 @@ void remove_client_from_room(ROOM* room, int fd) {
     pthread_mutex_unlock(&room->room_mutex);
 }
 
-// Safely delete a room if there are no clients left in it
-void check_and_remove_empty_room(ROOM* target_room) {
-    pthread_mutex_lock(&global_room_mutex);
-    pthread_mutex_lock(&target_room->room_mutex);
-    int is_empty = (target_room->clients_head == NULL);
-    pthread_mutex_unlock(&target_room->room_mutex);
-
-    if (is_empty) {
-        ROOM* curr = room_head;
-        ROOM* prev = NULL;
-        while (curr != NULL) {
-            if (curr == target_room) {
-                if (prev == NULL) room_head = curr->next;
-                else prev->next = curr->next;
-
-                pthread_mutex_destroy(&curr->room_mutex);
-                free(curr);
-                printf("=> Room %d became empty and was deleted.\n", target_room->room_id);
-                break;
-            }
-            prev = curr;
-            curr = curr->next;
-        }
-    }
-    pthread_mutex_unlock(&global_room_mutex);
-}
 
 // Print the up-to-date client list organized by rooms
 void print_clients() {
