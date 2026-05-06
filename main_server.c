@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <time.h>
-#include <signal.h> // Added for SIGPIPE handling
+#include <signal.h> 
 
 #define PORT_NUM 9001
 
@@ -17,16 +17,13 @@ void error(const char *msg) {
     exit(1);
 }
 
-// User structure
 typedef struct _USR {
     int clisockfd;
     char ip[INET_ADDRSTRLEN];
     char name[50];
-    char color[20];
     struct _USR* next;
 } USR;
 
-// Room structure containing its own client list and mutex
 typedef struct _ROOM {
     int room_id;
     USR* clients_head;
@@ -36,21 +33,29 @@ typedef struct _ROOM {
 
 ROOM *room_head = NULL;
 pthread_mutex_t global_room_mutex = PTHREAD_MUTEX_INITIALIZER;
-int next_room_id = 1;
 
-// Safely add a client to a specific room
-void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name, const char* color) {
-    USR* new_usr = (USR*) malloc(sizeof(USR));
-    new_usr->clisockfd = fd;
-    strcpy(new_usr->ip, ip);
-    strcpy(new_usr->name, name);
-    strcpy(new_usr->color, color);
-    
-    pthread_mutex_lock(&room->room_mutex);
-    new_usr->next = room->clients_head;
-    room->clients_head = new_usr;
-    pthread_mutex_unlock(&room->room_mutex);
+// --- Helper: Find the lowest available room ID ---
+// NOTE: This must be called while global_room_mutex is locked!
+int get_next_available_room_id() {
+    int candidate_id = 1;
+    while (1) {
+        int exists = 0;
+        ROOM* r = room_head;
+        while (r != NULL) {
+            if (r->room_id == candidate_id) {
+                exists = 1;
+                break;
+            }
+            r = r->next;
+        }
+        // If no active room holds this ID, it's free to use
+        if (!exists) {
+            return candidate_id;
+        }
+        candidate_id++;
+    }
 }
+
 
 // Safely remove a client from a specific room
 void remove_client_from_room(ROOM* room, int fd) {
