@@ -24,26 +24,25 @@ const char* palette[15] = {
 // --- Client-Side "Hat" System ---
 int color_hat[15] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
-void* thread_main_recv(void* args) {
-    pthread_detach(pthread_self());
-    int sockfd = ((ThreadArgs*) args)->clisockfd;
-    free(args);
-
-    char buffer[1024]; 
-    int n;
-
-    while (1) {
-        memset(buffer, 0, 1024);
-        n = recv(sockfd, buffer, 1024, 0);
-        if (n <= 0) {
-            printf("\nDisconnected from server.\n");
-            exit(0);
-        }
-        printf("\r%s\n", buffer); 
+// Shake the hat
+void shuffle_colors() {
+    for (int i = 14; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int temp = color_hat[i];
+        color_hat[i] = color_hat[j];
+        color_hat[j] = temp;
     }
-
-    return NULL;
 }
+
+void error(const char *msg) {
+    perror(msg);
+    exit(0);
+}
+
+typedef struct _ThreadArgs {
+    int clisockfd;
+} ThreadArgs;
+
 
 void* thread_main_send(void* args) {
     pthread_detach(pthread_self());
