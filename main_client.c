@@ -44,29 +44,72 @@ typedef struct _ThreadArgs {
 } ThreadArgs;
 
 
-void* thread_main_send(void* args) {
+void* thread_main_recv(void* args) {
     pthread_detach(pthread_self());
     int sockfd = ((ThreadArgs*) args)->clisockfd;
     free(args);
 
-    char buffer[256];
+    char buffer[1024]; 
     int n;
 
+    // --- Localized State Tracking ---
+    char tracked_names[100][100];
+    int tracked_colors[100];
+    int tracked_count = 0;
+
     while (1) {
-        memset(buffer, 0, 256);
+        memset(buffer, 0, 1024);
+        n = recv(sockfd, buffer, 1024, 0);
+        if (n <= 0) {
+            printf("\nDisconnected from server.\n");
+            exit(0);
+        }
+
+        // Check if message is a standard chat: "[Name (IP)]: Message"
+        if (buffer[0] == '[') {
+            char identifier[100];
+            memset(identifier, 0, 100);
+            
+            // Extract everything between the opening '[' and closing ']'
+            if (sscanf(buffer, "[%99[^]]", identifier) == 1) {
+                
+                int color_idx = 0;
+                int found = 0;
+                
+                // Search local dictionary for existing color
+                for (int i = 0; i < tracked_count; i++) {
+                    if (strcmp(tracked_names[i], identifier) == 0) {
+                        color_idx = tracked_colors[i];
+                        found = 1;
+                        break;
+                    }
+                }
+                
+                // If it's a new user, draw from the local shuffled hat
+                if (!found && tracked_count < 100) {
+                    strcpy(tracked_names[tracked_count], identifier);
+                    
+                    // Pull the next random color from the hat (recycle if > 15 people join)
+                    int hat_index = tracked_count % 15;
+                    tracked_colors[tracked_count] = color_hat[hat_index]; 
+                    
+                    color_idx = tracked_colors[tracked_count];
+                    tracked_count++;
+                }
+
+                // Print the fully colored message to the user's terminal
+                printf("\r%s%s\033[0m\n", palette[color_idx], buffer);
+                continue;
+            }
+        }
         
-        if (fgets(buffer, 255, stdin) == NULL) break;
-        buffer[strcspn(buffer, "\n")] = 0;
-
-        if (strlen(buffer) == 0) continue; 
-        if (strcmp(buffer, "/quit") == 0) break;
-
-        n = send(sockfd, buffer, strlen(buffer), 0);
-        if (n < 0) error("ERROR writing to socket");
+        // System join/leave message (starts with ***), print in standard gray
+        printf("\r\033[1;30m%s\033[0m\n", buffer); 
     }
 
     return NULL;
 }
+
 
 int main(int argc, char *argv[]) {
     // Room argument is now optional
