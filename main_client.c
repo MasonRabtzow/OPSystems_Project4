@@ -138,7 +138,12 @@ void* thread_main_send(void* args) {
 
 
 int main(int argc, char *argv[]) {
-    // Room argument is now optional
+    signal(SIGPIPE, SIG_IGN);
+    
+    // Seed and shuffle the local client hat on startup
+    srand(time(NULL));
+    shuffle_colors();
+
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <hostname> [new | room_number]\n", argv[0]);
         exit(1);
@@ -147,11 +152,6 @@ int main(int argc, char *argv[]) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) error("ERROR opening socket");
 
-    struct sockaddr_in serv_addr;
-    memset((char*) &serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
-    serv_addr.sin_port = htons(PORT_NUM);
 
     if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
         struct hostent* server = gethostbyname(argv[1]);
