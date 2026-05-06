@@ -151,7 +151,11 @@ int main(int argc, char *argv[]) {
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) error("ERROR opening socket");
-
+    struct sockaddr_in serv_addr;
+    memset((char*) &serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = inet_addr(argv[1]);
+    serv_addr.sin_port = htons(PORT_NUM);
 
     if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
         struct hostent* server = gethostbyname(argv[1]);
