@@ -8,17 +8,21 @@
 #include <arpa/inet.h>
 #include <netdb.h> 
 #include <pthread.h>
+#include <signal.h>
+#include <time.h>
 
 #define PORT_NUM 9001
 
-void error(const char *msg) {
-    perror(msg);
-    exit(0);
-}
+// Extended 256-color ANSI Palette
+const char* palette[15] = {
+    "\033[38;5;196m", "\033[38;5;46m",  "\033[38;5;226m", "\033[38;5;33m",  
+    "\033[38;5;201m", "\033[38;5;51m",  "\033[38;5;214m", "\033[38;5;99m",  
+    "\033[38;5;211m", "\033[38;5;43m",  "\033[38;5;154m", "\033[38;5;220m", 
+    "\033[38;5;203m", "\033[38;5;69m",  "\033[38;5;121m"  
+};
 
-typedef struct _ThreadArgs {
-    int clisockfd;
-} ThreadArgs;
+// --- Client-Side "Hat" System ---
+int color_hat[15] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
 void* thread_main_recv(void* args) {
     pthread_detach(pthread_self());
