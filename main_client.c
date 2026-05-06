@@ -195,11 +195,6 @@ int main(int argc, char *argv[]) {
             choice[strcspn(choice, "\n")] = 0;
         }
         send(sockfd, choice, strlen(choice), 0);
-
-        // Send choice back to server
-        send(sockfd, choice, strlen(choice), 0);
-
-        // Await the final OK or ERR
         memset(response, 0, 1024);
         n = recv(sockfd, response, 1023, 0);
         if (n <= 0) error("ERROR reading final response from server");
@@ -218,44 +213,3 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
     }
-    else if (strncmp(response, "ERR", 3) == 0) {
-        // Condition C: Client passed a bad argument initially
-        printf("Connection Rejected: Room '%s' does not exist.\n", initial_request);
-        close(sockfd);
-        exit(1);
-    } else if (strncmp(response, "OK ", 3) == 0) {
-        // Condition D: Client passed a valid room number or "new" initially
-        int room_id = atoi(response + 3);
-        printf("Connected to %s with room number %d\n", inet_ntoa(serv_addr.sin_addr), room_id);
-    } else {
-        printf("Unknown server response. Disconnecting.\n");
-        close(sockfd);
-        exit(1);
-    }
-
-    // 3. Collect and Send Name
-    char name[50];
-    printf("Enter your name to join the chat: ");
-    fgets(name, 49, stdin);
-    name[strcspn(name, "\n")] = 0; 
-    send(sockfd, name, strlen(name), 0);
-    
-    printf("You are in the room. Type /quit to exit.\n\n");
-
-    // 4. Create Threads
-    pthread_t tid1, tid2;
-    ThreadArgs* args;
-    
-    args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
-    args->clisockfd = sockfd;
-    pthread_create(&tid1, NULL, thread_main_send, (void*) args);
-
-    args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
-    args->clisockfd = sockfd;
-    pthread_create(&tid2, NULL, thread_main_recv, (void*) args);
-
-    pthread_join(tid1, NULL);
-
-    close(sockfd);
-    return 0;
-}
