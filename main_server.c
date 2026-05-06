@@ -139,6 +139,27 @@ void print_clients() {
     printf("-----------------------------------------\n\n");
     pthread_mutex_unlock(&global_room_mutex);
 }
+void broadcast_to_room(ROOM* room, int fromfd, const char* message) {
+    pthread_mutex_lock(&room->room_mutex);
+    USR* cur = room->clients_head;
+    int nmsg = strlen(message);
+    
+    while (cur != NULL) {
+        if (cur->clisockfd != fromfd) {
+            int nsen = send(cur->clisockfd, message, nmsg, 0);
+            if (nsen != nmsg) {
+                perror("ERROR send() failed during broadcast");
+            }
+        }
+        cur = cur->next;
+    }
+    pthread_mutex_unlock(&room->room_mutex);
+}
+
+typedef struct _ThreadArgs {
+    int clisockfd;
+    char ip[INET_ADDRSTRLEN];
+} ThreadArgs;
 
 void* thread_main(void* args) {
     pthread_detach(pthread_self());
@@ -151,7 +172,7 @@ void* thread_main(void* args) {
     char buffer[1024];
     int nrcv;
 
-    // 1. Initial Handshake: Wait for room request
+    // 1. Initial Handshake
     nrcv = recv(clisockfd, buffer, 255, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
     buffer[nrcv] = '\0';
@@ -160,14 +181,12 @@ void* thread_main(void* args) {
     ROOM* my_room = NULL;
     char response[1024];
 
-    // Check if the client sent an invalid room number or explicitly asked for a list
     if (strcmp(buffer, "new") != 0 && atoi(buffer) <= 0) {
         pthread_mutex_lock(&global_room_mutex);
         
         if (room_head == NULL) {
-            // AUTONEW: No rooms exist, force create one
             my_room = (ROOM*) malloc(sizeof(ROOM));
-            my_room->room_id = next_room_id++;
+            my_room->room_id = get_next_available_room_id(); // Automatically picks lowest ID
             my_room->clients_head = NULL;
             pthread_mutex_init(&my_room->room_mutex, NULL);
             
@@ -178,7 +197,6 @@ void* thread_main(void* args) {
             snprintf(response, sizeof(response), "AUTONEW %d", my_room->room_id);
             send(clisockfd, response, strlen(response), 0);
         } else {
-            // LIST: Rooms exist, compile the interactive menu
             strcpy(response, "LIST\n--- Available Rooms ---\n");
             ROOM* curr = room_head;
             while (curr != NULL) {
@@ -195,16 +213,54 @@ void* thread_main(void* args) {
             }
             pthread_mutex_unlock(&global_room_mutex);
 
-            // Send list menu to client
             send(clisockfd, response, strlen(response), 0);
 
-            // Wait for client to make a choice
             nrcv = recv(clisockfd, buffer, 255, 0);
             if (nrcv <= 0) { close(clisockfd); return NULL; }
             buffer[nrcv] = '\0';
             buffer[strcspn(buffer, "\n")] = 0;
         }
     }
+
+    if (my_room == NULL) {
+        if (strcmp(buffer, "new") == 0) {
+            pthread_mutex_lock(&global_room_mutex);
+            my_room = (ROOM*) malloc(sizeof(ROOM));
+            my_room->room_id = get_next_available_room_id(); // Automatically picks lowest ID
+            my_room->clients_head = NULL;
+            pthread_mutex_init(&my_room->room_mutex, NULL);
+            
+            my_room->next = room_head;
+            room_head = my_room;
+            pthread_mutex_unlock(&global_room_mutex);
+
+            snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+            send(clisockfd, response, strlen(response), 0);
+        } else {
+            int requested_id = atoi(buffer);
+            pthread_mutex_lock(&global_room_mutex);
+            ROOM* curr = room_head;
+            while (curr != NULL) {
+                if (curr->room_id == requested_id) {
+                    my_room = curr;
+                    break;
+                }
+                curr = curr->next;
+            }
+            pthread_mutex_unlock(&global_room_mutex);
+
+            if (my_room != NULL) {
+                snprintf(response, sizeof(response), "OK %d", my_room->room_id);
+                send(clisockfd, response, strlen(response), 0);
+            } else {
+                snprintf(response, sizeof(response), "ERR");
+                send(clisockfd, response, strlen(response), 0);
+                close(clisockfd);
+                return NULL;
+            }
+        }
+    }
+
     // 2. Process room assignment (unless AUTONEW already handled it)
         if (my_room == NULL) {
             if (strcmp(buffer, "new") == 0) {
