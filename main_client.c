@@ -166,13 +166,12 @@ int main(int argc, char *argv[]) {
     printf("Connecting to server...\n");
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
-
-    // 1. Handshake Phase: Send initial request
+    // 1. Handshake Phase
     char initial_request[64];
     if (argc >= 3) {
-        strcpy(initial_request, argv[2]); // Explicit argument passed
+        strcpy(initial_request, argv[2]); 
     } else {
-        strcpy(initial_request, "LIST");  // Trigger the menu fallback
+        strcpy(initial_request, "LIST"); 
     }
     send(sockfd, initial_request, strlen(initial_request), 0);
     
@@ -180,24 +179,22 @@ int main(int argc, char *argv[]) {
     memset(response, 0, 1024);
     int n = recv(sockfd, response, 1023, 0);
     if (n <= 0) error("ERROR reading response from server");
-    response[n] = '\0'; // Guarantee null termination
+    response[n] = '\0'; 
 
     // 2. Process Multi-Stage Server Response
     if (strncmp(response, "AUTONEW ", 8) == 0) {
-        // Condition A: Zero rooms existed, server forced a new one
         int room_id = atoi(response + 8);
         printf("Connected to %s with new room number %d\n", inet_ntoa(serv_addr.sin_addr), room_id);
     } 
     else if (strncmp(response, "LIST\n", 5) == 0) {
-        // Condition B: Rooms exist, display menu and prompt user
         printf("\n%s\n", response + 5);
-        
         char choice[64] = "";
         while (strlen(choice) == 0) {
             printf("Choose the room number or type [new] to create a new room: ");
             fgets(choice, 63, stdin);
             choice[strcspn(choice, "\n")] = 0;
         }
+        send(sockfd, choice, strlen(choice), 0);
 
         // Send choice back to server
         send(sockfd, choice, strlen(choice), 0);
