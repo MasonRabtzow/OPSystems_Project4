@@ -175,7 +175,7 @@ void* thread_main(void* args) {
     char buffer[1024];
     int nrcv;
 
-    //Room Selection/Creation
+    //room selection/creation
     nrcv = recv(clisockfd, buffer, 255, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
     buffer[nrcv] = '\0';
@@ -189,7 +189,7 @@ void* thread_main(void* args) {
         
         if (room_head == NULL) {
             my_room = (ROOM*) malloc(sizeof(ROOM));
-            my_room->room_id = get_next_available_room_id(); // Automatically picks lowest ID
+            my_room->room_id = get_next_available_room_id(); //pick lowest ID
             my_room->clients_head = NULL;
             pthread_mutex_init(&my_room->room_mutex, NULL);
             
@@ -229,7 +229,7 @@ void* thread_main(void* args) {
         if (strcmp(buffer, "new") == 0) {
             pthread_mutex_lock(&global_room_mutex);
             my_room = (ROOM*) malloc(sizeof(ROOM));
-            my_room->room_id = get_next_available_room_id(); // Automatically picks lowest ID
+            my_room->room_id = get_next_available_room_id(); //lowest ID
             my_room->clients_head = NULL;
             pthread_mutex_init(&my_room->room_mutex, NULL);
             
