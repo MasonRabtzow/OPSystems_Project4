@@ -34,8 +34,7 @@ typedef struct _ROOM {
 ROOM *room_head = NULL;
 pthread_mutex_t global_room_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// --- Helper: Find the lowest available room ID ---
-// NOTE: This must be called while global_room_mutex is locked!
+//find lowest available room ID
 int get_next_available_room_id() {
     int candidate_id = 1;
     while (1) {
@@ -48,7 +47,7 @@ int get_next_available_room_id() {
             }
             r = r->next;
         }
-        // If no active room holds this ID, it's free to use
+        //no active room holds an ID then use
         if (!exists) {
             return candidate_id;
         }
@@ -56,7 +55,7 @@ int get_next_available_room_id() {
     }
 }
 
-
+//add client
 void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name) {
     USR* new_usr = (USR*) malloc(sizeof(USR));
     new_usr->clisockfd = fd;
@@ -69,6 +68,7 @@ void add_client_to_room(ROOM* room, int fd, const char* ip, const char* name) {
     pthread_mutex_unlock(&room->room_mutex);
 }
 
+//remove client
 void remove_client_from_room(ROOM* room, int fd) {
     pthread_mutex_lock(&room->room_mutex);
     USR* curr = room->clients_head;
@@ -86,6 +86,7 @@ void remove_client_from_room(ROOM* room, int fd) {
     pthread_mutex_unlock(&room->room_mutex);
 }
 
+//check/remove empty room
 void check_and_remove_empty_room(ROOM* target_room) {
     pthread_mutex_lock(&global_room_mutex);
     pthread_mutex_lock(&target_room->room_mutex);
@@ -100,13 +101,13 @@ void check_and_remove_empty_room(ROOM* target_room) {
                 if (prev == NULL) room_head = curr->next;
                 else prev->next = curr->next;
 
-                // FIX: Store the ID before we destroy the memory!
+                //store ID before mem is destroyed
                 int deleted_id = curr->room_id; 
 
                 pthread_mutex_destroy(&curr->room_mutex);
-                free(curr); // Memory is handed back to OS here
+                free(curr); //give mem back to os
                 
-                // Now we safely print the stored integer
+                //print what is stored
                 printf("=> Room %d became empty and was deleted.\n", deleted_id);
                 break;
             }
@@ -117,6 +118,7 @@ void check_and_remove_empty_room(ROOM* target_room) {
     pthread_mutex_unlock(&global_room_mutex);
 }
 
+//debug print
 void print_clients() {
     pthread_mutex_lock(&global_room_mutex);
     printf("\n--- Current Connected Clients By Room ---\n");
@@ -139,6 +141,7 @@ void print_clients() {
     printf("-----------------------------------------\n\n");
     pthread_mutex_unlock(&global_room_mutex);
 }
+//broadcast message to all clients in the room except sender
 void broadcast_to_room(ROOM* room, int fromfd, const char* message) {
     pthread_mutex_lock(&room->room_mutex);
     USR* cur = room->clients_head;
@@ -155,7 +158,7 @@ void broadcast_to_room(ROOM* room, int fromfd, const char* message) {
     }
     pthread_mutex_unlock(&room->room_mutex);
 }
-
+//threads for each connection
 typedef struct _ThreadArgs {
     int clisockfd;
     char ip[INET_ADDRSTRLEN];
@@ -172,7 +175,7 @@ void* thread_main(void* args) {
     char buffer[1024];
     int nrcv;
 
-    // 1. Initial Handshake
+    //Room Selection/Creation
     nrcv = recv(clisockfd, buffer, 255, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
     buffer[nrcv] = '\0';
@@ -261,7 +264,7 @@ void* thread_main(void* args) {
         }
     }
 
-    // 2. Receive the client's name
+    //client name reg
     char name[50];
     nrcv = recv(clisockfd, name, 49, 0);
     if (nrcv <= 0) { close(clisockfd); return NULL; }
@@ -274,7 +277,7 @@ void* thread_main(void* args) {
     snprintf(buffer, sizeof(buffer), "*** %s (%s) has joined Room %d", name, ip, my_room->room_id);
     broadcast_to_room(my_room, clisockfd, buffer);
 
-    // 3. Main communication loop
+    //message handling loop
     while (1) {
         memset(buffer, 0, 1024);
         nrcv = recv(clisockfd, buffer, 511, 0); 
@@ -291,7 +294,7 @@ void* thread_main(void* args) {
         broadcast_to_room(my_room, clisockfd, formatted_msg);
     }
 
-    // 4. Handle Disconnect
+    //disconnect cleanup
     remove_client_from_room(my_room, clisockfd);
     
     snprintf(buffer, sizeof(buffer), "*** %s (%s) has left Room %d", name, ip, my_room->room_id);
@@ -304,6 +307,7 @@ void* thread_main(void* args) {
     return NULL;
 }
 
+//main
 int main(int argc, char *argv[]) {
     signal(SIGPIPE, SIG_IGN); 
 
